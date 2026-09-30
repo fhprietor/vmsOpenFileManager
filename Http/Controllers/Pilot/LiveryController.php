@@ -84,29 +84,33 @@ public function index()
      */
     public function download($id)
     {
+        // Solo liveries activas
         $livery = Livery::with(['subfleet', 'manufacturer'])
+            ->where('is_active', true)
             ->findOrFail($id);
-
-        // Increment download counter
-        $livery->incrementDownloads();
 
         // Check if it's an external URL
         if ($livery->file_type === 'external') {
+            $livery->incrementDownloads();
+
             return redirect()->away($livery->file_path);
         }
 
         // Local file download
-        if (Storage::disk('public')->exists($livery->file_path)) {
-            // Generate filename: liveryname_manufacturer_subfleet.zip
-            $subfleetName = $livery->subfleet ? $livery->subfleet->name : 'unknown';
-            $manufacturerName = $livery->manufacturer ? $livery->manufacturer->name : 'unknown';
-            $filename = $livery->name . '_' . $manufacturerName . '_' . $subfleetName . '.zip';
-            $filename = preg_replace('/[^a-zA-Z0-9_\-\.]/', '_', $filename);
-            
-            return Storage::disk('public')->download($livery->file_path, $filename);
+        if (!Storage::disk('public')->exists($livery->file_path)) {
+            abort(404, 'File not found');
         }
 
-        abort(404, 'File not found');
+        // Increment download counter
+        $livery->incrementDownloads();
+
+        // Generate filename: liveryname_manufacturer_subfleet.zip
+        $subfleetName = $livery->subfleet ? $livery->subfleet->name : 'unknown';
+        $manufacturerName = $livery->manufacturer ? $livery->manufacturer->name : 'unknown';
+        $filename = $livery->name . '_' . $manufacturerName . '_' . $subfleetName . '.zip';
+        $filename = preg_replace('/[^a-zA-Z0-9_\-\.]/', '_', $filename);
+
+        return Storage::disk('public')->download($livery->file_path, $filename);
     }
 
     /**
@@ -137,7 +141,9 @@ public function index()
      */
     public function info($id)
     {
+        // No exponer metadatos de liveries inactivas
         $livery = Livery::with(['simulator', 'subfleet', 'manufacturer', 'aircraft'])
+            ->where('is_active', true)
             ->findOrFail($id);
 
         return response()->json([

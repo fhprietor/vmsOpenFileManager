@@ -85,6 +85,10 @@ Enlaces de admin registrados: **File Manager** (`/admin/vmsopenfilemanager`),
 | GET | `/liveries/info/{id}` | `@info` |
 | GET | `/liveries/download/{id}` | `@download` |
 
+> **Control de acceso:** las descargas de ficheros exigen fichero `is_active` y
+> carpeta `is_public` (y `folder($id)` también); las de liveries exigen
+> `is_active`, igual que `info`. Un acceso no permitido responde **404**.
+
 ### API
 
 **No hay superficie de API.** `Routes/api.php`, `Routes/test.php` y todo
@@ -173,13 +177,11 @@ Resources/views/     admin/  pilot/  layouts/
 
 ## Deuda técnica y seguridad
 
-1. **⚠️ Numeración de migración inconsistente (rompe instalaciones limpias):** la
-   tabla `migrations` de esta instalación registra
-   `2024_01_01_000004_create_vmsopen_liveries_table`, pero el fichero en disco es
-   `2024_01_01_000007_create_vmsopen_liveries_table.php`. En un despliegue nuevo
-   se ejecutaría `000007` y fallaría con "table already exists". Hay que
-   renombrar el fichero a `..._000004_...` (o recrear el registro) antes de
-   publicar el módulo.
+1. ~~Numeración de migración inconsistente~~ **Arreglado**: la migración de
+   liveries se llamaba `..._000007_...` mientras la BD registraba
+   `..._000004_...`, así que una instalación limpia fallaba con "table already
+   exists". Se renombró a `2024_01_01_000004_create_vmsopen_liveries_table.php`:
+   ahora la numeración es correlativa (000001–000006) y coincide con el registro.
 2. **Sin API**: `Routes/api.php`, `Routes/test.php` y `Http/Routes/*` no se
    cargan. `Http/Routes/*` apunta a `AdminController`/`ApiController`/
    `IndexController` de andamiaje (el de admin ni existe).
@@ -187,11 +189,17 @@ Resources/views/     admin/  pilot/  layouts/
    `admin/settings/index.blade.php` (`Admin\SettingsController@index`, que además
    no tiene ruta) y `pilot/liveries/search.blade.php` (rama HTML de `search`; la
    rama JSON funciona).
-4. **Sin control de acceso por fichero/carpeta**: `FilePermission` y
-   `vmsopen_permissions` están muertos (0 filas). `folder($id)` y
-   `download($fileId)` no vuelven a comprobar `is_public`, y
-   `Pilot\LiveryController@download($id)` no comprueba `is_active`: **cualquier
-   piloto autenticado puede descargar cualquier fichero o livery por ID**.
+4. ~~Sin control de acceso por fichero/carpeta~~ **Arreglado** en lo relativo a
+   `is_public`/`is_active`:
+   - `folder($id)` exige `is_public = true` y solo lista hijos públicos.
+   - `download($fileId)` exige fichero `is_active` **y** carpeta pública.
+   - `liveries/download/{id}` e `liveries/info/{id}` exigen `is_active`.
+   - Los contadores de descargas solo se incrementan cuando la descarga se sirve
+     de verdad.
+   Lo que sigue pendiente: **no hay ACL por usuario/rol** (`FilePermission` y
+   `vmsopen_permissions` continúan sin uso, 0 filas) y un hijo público de una
+   carpeta privada sigue siendo accesible por su ID (se considera intencionado:
+   `is_public` declara la carpeta, no el árbol).
 5. **Sin validación de extensiones** en el file manager (la tabla llegó a
    contener un `.config`), y los límites están fijados en código: 100 MB
    (ficheros) y 200 MB + `mimes:zip` (livery local).
